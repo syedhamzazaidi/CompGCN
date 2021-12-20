@@ -179,6 +179,7 @@ class Runner(object):
 		if   model_name.lower()	== 'compgcn_transe': 	model = CompGCN_TransE(self.edge_index, self.edge_type, params=self.p)
 		elif model_name.lower()	== 'compgcn_distmult': 	model = CompGCN_DistMult(self.edge_index, self.edge_type, params=self.p)
 		elif model_name.lower()	== 'compgcn_conve': 	model = CompGCN_ConvE(self.edge_index, self.edge_type, params=self.p)
+		elif model_name.lower()	== 'compgcn_rotate': 	model = CompGCN_RotatE(self.edge_index, self.edge_type, params=self.p)		
 		else: raise NotImplementedError
 
 		model.to(self.device)
@@ -308,7 +309,7 @@ class Runner(object):
 
 			for step, batch in enumerate(train_iter):
 				sub, rel, obj, label	= self.read_batch(batch, split)
-				pred			= self.model.forward(sub, rel)
+				pred			= self.model.forward(sub, rel,obj)
 				b_range			= torch.arange(pred.size()[0], device=self.device)
 				target_pred		= pred[b_range, obj]
 				pred 			= torch.where(label.byte(), -torch.ones_like(pred) * 10000000, pred)
@@ -348,7 +349,7 @@ class Runner(object):
 			self.optimizer.zero_grad()
 			sub, rel, obj, label = self.read_batch(batch, 'train')
 
-			pred	= self.model.forward(sub, rel)
+			pred	= self.model.forward(sub, rel,obj)
 			loss	= self.model.loss(pred, label)
 
 			loss.backward()

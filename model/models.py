@@ -22,7 +22,18 @@ class CompGCNBase(BaseModel):
 		self.p.gcn_dim		= self.p.embed_dim if self.p.gcn_layer == 1 else self.p.gcn_dim
 		self.init_embed		= get_param((self.p.num_ent,   self.p.init_dim))
 		self.device		= self.edge_index.device
-
+		self.hidden_dim = 1000
+        self.epsilon = 2.0
+        
+        self.gamma = nn.Parameter(
+            torch.Tensor([gamma]), 
+            requires_grad=False
+        )
+        
+        self.embedding_range = nn.Parameter(
+            torch.Tensor([(self.gamma.item() + self.epsilon) / hidden_dim]), 
+            requires_grad=False
+        )
 		if self.p.num_bases > 0:
 			self.init_rel  = get_param((self.p.num_bases,   self.p.init_dim))
 		else:
@@ -57,7 +68,7 @@ class CompGCN_TransE(CompGCNBase):
 		super(self.__class__, self).__init__(edge_index, edge_type, params.num_rel, params)
 		self.drop = torch.nn.Dropout(self.p.hid_drop)
 
-	def forward(self, sub, rel):
+	def forward(self, sub, rel,obj):
 
 		sub_emb, rel_emb, all_ent	= self.forward_base(sub, rel, self.drop, self.drop)
 		obj_emb				= sub_emb + rel_emb
@@ -72,7 +83,7 @@ class CompGCN_DistMult(CompGCNBase):
 		super(self.__class__, self).__init__(edge_index, edge_type, params.num_rel, params)
 		self.drop = torch.nn.Dropout(self.p.hid_drop)
 
-	def forward(self, sub, rel):
+	def forward(self, sub, rel,obj):
 
 		sub_emb, rel_emb, all_ent	= self.forward_base(sub, rel, self.drop, self.drop)
 		obj_emb				= sub_emb * rel_emb
@@ -82,6 +93,36 @@ class CompGCN_DistMult(CompGCNBase):
 
 		score = torch.sigmoid(x)
 		return score
+
+class CompGCN_RotatE(CompGCNBase):
+	def __init__(self, edge_index, edge_type, params=None):
+		super(self.__class__, self).__init__(edge_index, edge_type, params.num_rel, params)
+		self.drop = torch.nn.Dropout(self.p.hid_drop)
+
+	def forward(self, head, relation, tail):
+        pi = 3.14159265358979323846
+        
+        re_head, im_head = torch.chunk(head, 2, dim=2)
+        re_tail, im_tail = torch.chunk(tail, 2, dim=2)
+
+        #Make phases of relations uniformly distributed in [-pi, pi]
+
+        phase_relation = relation/(self.embedding_range.item()/pi)
+
+        re_relation = torch.cos(phase_relation)
+        im_relation = torch.sin(phase_relation)
+        
+        re_score = re_relation * re_tail + im_relation * im_tail
+        im_score = re_relation * im_tail - im_relation * re_tail
+        re_score = re_score - re_head
+        im_score = im_score - im_head
+    
+        score = torch.stack([re_score, im_score], dim = 0)
+        score = score.norm(dim = 0)
+
+        score = self.gamma.item() - score.sum(dim = 2)
+        return score
+
 
 class CompGCN_ConvE(CompGCNBase):
 	def __init__(self, edge_index, edge_type, params=None):
@@ -108,7 +149,7 @@ class CompGCN_ConvE(CompGCNBase):
 		stack_inp	= torch.transpose(stack_inp, 2, 1).reshape((-1, 1, 2*self.p.k_w, self.p.k_h))
 		return stack_inp
 
-	def forward(self, sub, rel):
+	def forward(self, sub, rel,obj):
 
 		sub_emb, rel_emb, all_ent	= self.forward_base(sub, rel, self.hidden_drop, self.feature_drop)
 		stk_inp				= self.concat(sub_emb, rel_emb)
