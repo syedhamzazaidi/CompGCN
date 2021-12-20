@@ -23,14 +23,14 @@ class CompGCNBase(BaseModel):
 		self.init_embed		= get_param((self.p.num_ent,   self.p.init_dim))
 		self.device		= self.edge_index.device
 		self.hidden_dim = 1000
-        self.epsilon = 2.0
+		self.epsilon = 2.0
         
-        self.gamma = nn.Parameter(
+		self.gamma = nn.Parameter(
             torch.Tensor([gamma]), 
             requires_grad=False
         )
         
-        self.embedding_range = nn.Parameter(
+		self.embedding_range = nn.Parameter(
             torch.Tensor([(self.gamma.item() + self.epsilon) / hidden_dim]), 
             requires_grad=False
         )
@@ -100,28 +100,28 @@ class CompGCN_RotatE(CompGCNBase):
 		self.drop = torch.nn.Dropout(self.p.hid_drop)
 
 	def forward(self, head, relation, tail):
-        pi = 3.14159265358979323846
-        
-        re_head, im_head = torch.chunk(head, 2, dim=2)
-        re_tail, im_tail = torch.chunk(tail, 2, dim=2)
+		pi = 3.14159265358979323846
 
-        #Make phases of relations uniformly distributed in [-pi, pi]
+		re_head, im_head = torch.chunk(head, 2, dim=2)
+		re_tail, im_tail = torch.chunk(tail, 2, dim=2)
 
-        phase_relation = relation/(self.embedding_range.item()/pi)
+		#Make phases of relations uniformly distributed in [-pi, pi]
 
-        re_relation = torch.cos(phase_relation)
-        im_relation = torch.sin(phase_relation)
-        
-        re_score = re_relation * re_tail + im_relation * im_tail
-        im_score = re_relation * im_tail - im_relation * re_tail
-        re_score = re_score - re_head
-        im_score = im_score - im_head
-    
-        score = torch.stack([re_score, im_score], dim = 0)
-        score = score.norm(dim = 0)
+		phase_relation = relation/(self.embedding_range.item()/pi)
 
-        score = self.gamma.item() - score.sum(dim = 2)
-        return score
+		re_relation = torch.cos(phase_relation)
+		im_relation = torch.sin(phase_relation)
+
+		re_score = re_relation * re_tail + im_relation * im_tail
+		im_score = re_relation * im_tail - im_relation * re_tail
+		re_score = re_score - re_head
+		im_score = im_score - im_head
+
+		score = torch.stack([re_score, im_score], dim = 0)
+		score = score.norm(dim = 0)
+
+		score = self.gamma.item() - score.sum(dim = 2)
+		return score
 
 
 class CompGCN_ConvE(CompGCNBase):
